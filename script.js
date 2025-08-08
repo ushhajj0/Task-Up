@@ -27,9 +27,9 @@ const WITHDRAWAL_MINIMUMS = {
     ton: 7
 };
 
-// --- [CORE APP LOGIC - SIMPLIFIED VERSION] ---
+// --- [CORE APP LOGIC] ---
 
-window.initializeApp = async function() {
+async function initializeApp() {
     localUserId = getLocalUserId();
     console.log(`Initializing app for User ID: ${localUserId}`);
     const userRef = db.collection('users').doc(localUserId);
@@ -57,16 +57,12 @@ window.initializeApp = async function() {
             }
         }
     }
+    // Setup button listeners after we have the initial state
+    setupTaskButtonListeners();
     updateUI();
 }
 
-function getLocalUserId() {
-    let storedId = localStorage.getItem('localAppUserId');
-    if (storedId) return storedId;
-    const newId = 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2);
-    localStorage.setItem('localAppUserId', newId);
-    return newId;
-}
+function getLocalUserId() { let storedId = localStorage.getItem('localAppUserId'); if (storedId) return storedId; const newId = 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2); localStorage.setItem('localAppUserId', newId); return newId; }
 function generatePlaceholderAvatar(userId) { return `https://i.pravatar.cc/150?u=${userId}`; }
 
 function updateUI() {
@@ -97,47 +93,47 @@ function updateUI() {
     });
 }
 
-// --- [NEW: STRICTER BONUS TASK LOGIC] ---
+// --- [NEW: ROBUST EVENT LISTENER SETUP] ---
+function setupTaskButtonListeners() {
+    document.querySelectorAll('.task-card').forEach(card => {
+        const joinBtn = card.querySelector('.join-btn');
+        const verifyBtn = card.querySelector('.verify-btn');
+        
+        const taskId = card.dataset.taskId;
+        const url = card.dataset.url;
+        const reward = parseFloat(card.dataset.reward);
 
-/**
- * STEP 1: Called when the user clicks the "Join" button.
- * This opens the link and enables the "Verify" button for that specific task.
- */
-window.handleJoinClick = function(taskId, url) {
-    // Find the specific task card and its buttons
+        if (joinBtn) {
+            joinBtn.addEventListener('click', () => {
+                handleJoinClick(taskId, url);
+            });
+        }
+        if (verifyBtn) {
+            verifyBtn.addEventListener('click', () => {
+                handleVerifyClick(taskId, reward);
+            });
+        }
+    });
+}
+
+// --- [STRICTER BONUS TASK LOGIC] ---
+function handleJoinClick(taskId, url) {
     const taskCard = document.getElementById(`task-${taskId}`);
     if (!taskCard) return;
-
     const joinButton = taskCard.querySelector('.join-btn');
     const verifyButton = taskCard.querySelector('.verify-btn');
-
-    // Open the Telegram channel link
     window.open(url, '_blank');
     alert("After joining, return to the app and press 'Verify' to claim your reward.");
-    
-    // Enable the verify button and disable the join button
     if (verifyButton) verifyButton.disabled = false;
     if (joinButton) joinButton.disabled = true;
 }
 
-/**
- * STEP 2: Called when the user clicks the now-enabled "Verify" button.
- */
-window.handleVerifyClick = async function(taskId, reward) {
-    if (userState.joinedBonusTasks.includes(taskId)) {
-        alert("You have already completed this task.");
-        return;
-    }
-
+async function handleVerifyClick(taskId, reward) {
+    if (userState.joinedBonusTasks.includes(taskId)) { alert("You have already completed this task."); return; }
     const taskCard = document.getElementById(`task-${taskId}`);
     const verifyButton = taskCard.querySelector('.verify-btn');
     verifyButton.disabled = true;
     verifyButton.textContent = "Verifying...";
-
-    // NOTE: This is still a simulation. The app trusts the user has joined.
-    // A real check requires a backend server. This UI flow is the strictest
-    // frontend-only approach possible.
-    
     try {
         const userRef = db.collection('users').doc(localUserId);
         await userRef.update({
@@ -145,31 +141,32 @@ window.handleVerifyClick = async function(taskId, reward) {
             totalEarned: firebase.firestore.FieldValue.increment(reward),
             joinedBonusTasks: firebase.firestore.FieldValue.arrayUnion(taskId)
         });
-
         userState.balance += reward;
         userState.totalEarned += reward;
         userState.joinedBonusTasks.push(taskId);
-        
         alert(`Verification successful! You've earned a bonus of $${reward}.`);
-        updateUI(); // This will now apply the .completed class to hide the buttons
+        updateUI();
     } catch (error) {
         console.error("Error rewarding user for channel join:", error);
         alert("An error occurred. Please try again.");
-        // Re-enable the button if there was a database error
         verifyButton.disabled = false;
         verifyButton.textContent = "Verify";
     }
 }
-
 
 // --- [OTHER USER ACTIONS] ---
 window.completeAdTask = async function() { if (userState.tasksCompletedToday >= DAILY_TASK_LIMIT) { alert("You have completed all ad tasks for today!"); return; } const taskButton = document.getElementById('start-task-button'); try { taskButton.disabled = true; taskButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading Ad...'; await window.show_9685198(); const userRef = db.collection('users').doc(localUserId); await userRef.update({ balance: firebase.firestore.FieldValue.increment(AD_REWARD), totalEarned: firebase.firestore.FieldValue.increment(AD_REWARD), tasksCompletedToday: firebase.firestore.FieldValue.increment(1), totalAdsViewed: firebase.firestore.FieldValue.increment(1), lastTaskTimestamp: firebase.firestore.FieldValue.serverTimestamp() }); userState.balance += AD_REWARD; userState.totalEarned += AD_REWARD; userState.tasksCompletedToday++; userState.totalAdsViewed++; alert("Success! $0.002 has been added to your balance."); } catch (error) { console.error("An error occurred during the ad task:", error); alert("Ad could not be shown or was closed early. Please try again."); } finally { updateUI(); } }
 window.submitWithdrawal = async function() { const amount = parseFloat(document.getElementById('withdraw-amount').value); const method = document.getElementById('withdraw-method').value; const walletId = document.getElementById('wallet-id').value.trim(); const minAmount = WITHDRAWAL_MINIMUMS[method]; if (isNaN(amount) || amount <= 0 || !walletId) { alert('Please enter a valid amount and wallet ID.'); return; } if (amount < minAmount) { alert(`Withdrawal failed. The minimum for ${method.toUpperCase()} is $${minAmount}.`); return; } if (amount > userState.balance) { alert('Withdrawal failed. You do not have enough balance.'); return; } await db.collection('withdrawals').add({ userId: localUserId, username: userState.telegramUsername, amount: amount, method: method, walletId: walletId, status: "pending", requestedAt: firebase.firestore.FieldValue.serverTimestamp() }); const userRef = db.collection('users').doc(localUserId); await userRef.update({ balance: firebase.firestore.FieldValue.increment(-amount) }); alert(`Success! Your withdrawal request for $${amount.toFixed(3)} has been submitted.`); userState.balance -= amount; document.getElementById('withdraw-amount').value = ''; document.getElementById('wallet-id').value = ''; updateUI(); }
 
 // --- [UTILITY FUNCTIONS] ---
-window.openTelegramLink = function(url) { window.open(url, '_blank'); }
 window.showTab = function(tabName, element) { document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.getElementById(tabName).classList.add('active'); document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active')); element.classList.add('active'); }
 window.openReferModal = function() { document.getElementById('refer-modal').style.display = 'flex'; }
 window.closeReferModal = function() { document.getElementById('refer-modal').style.display = 'none'; }
 window.copyReferralLink = function(button) { const linkInput = document.getElementById('referral-link'); navigator.clipboard.writeText(linkInput.value).then(() => { const originalIcon = button.innerHTML; button.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(() => { button.innerHTML = originalIcon; }, 1500); }).catch(err => console.error('Failed to copy text: ', err)); }
 window.onclick = function(event) { if (event.target == document.getElementById('refer-modal')) { closeReferModal(); } }
+
+// --- [APP ENTRY POINT] ---
+document.addEventListener('DOMContentLoaded', () => {
+    // We are no longer checking for the Telegram object, just starting the app.
+    initializeApp();
+});
