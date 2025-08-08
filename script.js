@@ -27,40 +27,28 @@ const WITHDRAWAL_MINIMUMS = {
     ton: 7
 };
 
-// --- [CORE APP LOGIC WITH TELEGRAM INTEGRATION] ---
-
-/**
- * The main initialization logic. This is now separate and will be called
- * by the event listener at the bottom of the file.
- */
+// --- [CORE APP LOGIC] ---
 async function startApp(tgUser) {
     if (tgUser) {
-        // --- LIVE MODE: RUNNING INSIDE TELEGRAM ---
+        // LIVE MODE: RUNNING INSIDE TELEGRAM
         telegramUserId = tgUser.id.toString();
-        console.log(`LIVE MODE: Running in Telegram for user: ${tgUser.first_name} (ID: ${telegramUserId})`);
+        console.log(`LIVE MODE DETECTED: Running in Telegram for user: ${tgUser.first_name} (ID: ${telegramUserId})`);
         
         const userRef = db.collection('users').doc(telegramUserId);
         const doc = await userRef.get();
 
         if (!doc.exists) {
-            // NEW USER: Create account with their REAL Telegram data
             console.log('New Telegram user detected. Creating account...');
             const newUserState = {
                 username: `${tgUser.first_name} ${tgUser.last_name || ''}`.trim(),
                 telegramUsername: `@${tgUser.username || tgUser.id}`,
                 profilePicUrl: generatePlaceholderAvatar(telegramUserId),
-                balance: 0.0,
-                tasksCompletedToday: 0,
-                lastTaskTimestamp: null,
-                totalEarned: 0,
-                totalAdsViewed: 0,
-                totalRefers: 0,
-                joinedBonusTasks: []
+                balance: 0.0, tasksCompletedToday: 0, lastTaskTimestamp: null,
+                totalEarned: 0, totalAdsViewed: 0, totalRefers: 0, joinedBonusTasks: []
             };
             await userRef.set(newUserState);
             userState = newUserState;
         } else {
-            // RETURNING USER: Load their data
             console.log('Returning user. Loading data from Firebase...');
             userState = doc.data();
             let updates = {};
@@ -81,10 +69,9 @@ async function startApp(tgUser) {
             }
         }
     } else {
-        // --- FALLBACK/TESTING MODE: Not running in Telegram ---
+        // FALLBACK/TESTING MODE: Not running in Telegram
         console.warn("TESTING MODE: Not running in Telegram. Using a fake user ID.");
         telegramUserId = getFakeUserIdForTesting();
-        
         const userRef = db.collection('users').doc(telegramUserId);
         const doc = await userRef.get();
         if (!doc.exists) {
@@ -95,7 +82,6 @@ async function startApp(tgUser) {
             userState = doc.data();
         }
     }
-    
     updateUI();
 }
 
@@ -108,6 +94,7 @@ function getFakeUserIdForTesting() {
 }
 
 function updateUI() {
+    // This function remains the same, it correctly updates all UI parts.
     document.querySelectorAll('.profile-pic, .profile-pic-large').forEach(img => { if (userState.profilePicUrl) img.src = userState.profilePicUrl; });
     const balanceString = userState.balance.toFixed(3);
     const totalEarnedString = userState.totalEarned.toFixed(3);
@@ -145,16 +132,11 @@ window.completeAdTask = async function() {
         await window.show_9685198();
         const userRef = db.collection('users').doc(telegramUserId);
         await userRef.update({
-            balance: firebase.firestore.FieldValue.increment(AD_REWARD),
-            totalEarned: firebase.firestore.FieldValue.increment(AD_REWARD),
-            tasksCompletedToday: firebase.firestore.FieldValue.increment(1),
-            totalAdsViewed: firebase.firestore.FieldValue.increment(1),
+            balance: firebase.firestore.FieldValue.increment(AD_REWARD), totalEarned: firebase.firestore.FieldValue.increment(AD_REWARD),
+            tasksCompletedToday: firebase.firestore.FieldValue.increment(1), totalAdsViewed: firebase.firestore.FieldValue.increment(1),
             lastTaskTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-        userState.balance += AD_REWARD;
-        userState.totalEarned += AD_REWARD;
-        userState.tasksCompletedToday++;
-        userState.totalAdsViewed++;
+        userState.balance += AD_REWARD; userState.totalEarned += AD_REWARD; userState.tasksCompletedToday++; userState.totalAdsViewed++;
         alert("Success! $0.002 has been added to your balance.");
     } catch (error) {
         console.error("An error occurred during the ad task:", error);
@@ -164,53 +146,9 @@ window.completeAdTask = async function() {
     }
 }
 
-window.verifyJoin = async function(taskId, reward) {
-    if (userState.joinedBonusTasks.includes(taskId)) { alert("You have already completed this task."); return; }
-    const verifyButton = document.querySelector(`#task-${taskId} .verify-btn`);
-    verifyButton.disabled = true;
-    verifyButton.textContent = "Verifying...";
-    const hasJoined = confirm("Please confirm that you have joined the Telegram channel. We will verify this. False claims may lead to a ban.");
-    if (hasJoined) {
-        try {
-            const userRef = db.collection('users').doc(telegramUserId);
-            await userRef.update({ balance: firebase.firestore.FieldValue.increment(reward), totalEarned: firebase.firestore.FieldValue.increment(reward), joinedBonusTasks: firebase.firestore.FieldValue.arrayUnion(taskId) });
-            userState.balance += reward;
-            userState.totalEarned += reward;
-            userState.joinedBonusTasks.push(taskId);
-            alert(`Verification successful! You've earned a bonus of $${reward}.`);
-            updateUI();
-        } catch (error) {
-            console.error("Error rewarding user for channel join:", error);
-            alert("An error occurred. Please try again.");
-            verifyButton.disabled = false;
-            verifyButton.textContent = "Verify";
-        }
-    } else {
-        alert("Verification cancelled. Please join the channel and then click 'Verify' to claim your reward.");
-        verifyButton.disabled = false;
-        verifyButton.textContent = "Verify";
-    }
-}
-
-window.submitWithdrawal = async function() {
-    const amount = parseFloat(document.getElementById('withdraw-amount').value);
-    const method = document.getElementById('withdraw-method').value;
-    const walletId = document.getElementById('wallet-id').value.trim();
-    const minAmount = WITHDRAWAL_MINIMUMS[method];
-    if (isNaN(amount) || amount <= 0 || !walletId) { alert('Please enter a valid amount and wallet ID.'); return; }
-    if (amount < minAmount) { alert(`Withdrawal failed. The minimum for ${method.toUpperCase()} is $${minAmount}.`); return; }
-    if (amount > userState.balance) { alert('Withdrawal failed. You do not have enough balance.'); return; }
-    await db.collection('withdrawals').add({ userId: telegramUserId, username: userState.telegramUsername, amount: amount, method: method, walletId: walletId, status: "pending", requestedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    const userRef = db.collection('users').doc(telegramUserId);
-    await userRef.update({ balance: firebase.firestore.FieldValue.increment(-amount) });
-    alert(`Success! Your withdrawal request for $${amount.toFixed(3)} has been submitted.`);
-    userState.balance -= amount;
-    document.getElementById('withdraw-amount').value = '';
-    document.getElementById('wallet-id').value = '';
-    updateUI();
-}
-
-// --- [UTILITY FUNCTIONS] ---
+// Other functions (verifyJoin, submitWithdrawal, etc.) remain the same...
+window.verifyJoin = async function(taskId, reward) { if (userState.joinedBonusTasks.includes(taskId)) { alert("You have already completed this task."); return; } const verifyButton = document.querySelector(`#task-${taskId} .verify-btn`); verifyButton.disabled = true; verifyButton.textContent = "Verifying..."; const hasJoined = confirm("Please confirm that you have joined the Telegram channel. We will verify this. False claims may lead to a ban."); if (hasJoined) { try { const userRef = db.collection('users').doc(telegramUserId); await userRef.update({ balance: firebase.firestore.FieldValue.increment(reward), totalEarned: firebase.firestore.FieldValue.increment(reward), joinedBonusTasks: firebase.firestore.FieldValue.arrayUnion(taskId) }); userState.balance += reward; userState.totalEarned += reward; userState.joinedBonusTasks.push(taskId); alert(`Verification successful! You've earned a bonus of $${reward}.`); updateUI(); } catch (error) { console.error("Error rewarding user for channel join:", error); alert("An error occurred. Please try again."); verifyButton.disabled = false; verifyButton.textContent = "Verify"; } } else { alert("Verification cancelled. Please join the channel and then click 'Verify' to claim your reward."); verifyButton.disabled = false; verifyButton.textContent = "Verify"; } }
+window.submitWithdrawal = async function() { const amount = parseFloat(document.getElementById('withdraw-amount').value); const method = document.getElementById('withdraw-method').value; const walletId = document.getElementById('wallet-id').value.trim(); const minAmount = WITHDRAWAL_MINIMUMS[method]; if (isNaN(amount) || amount <= 0 || !walletId) { alert('Please enter a valid amount and wallet ID.'); return; } if (amount < minAmount) { alert(`Withdrawal failed. The minimum for ${method.toUpperCase()} is $${minAmount}.`); return; } if (amount > userState.balance) { alert('Withdrawal failed. You do not have enough balance.'); return; } await db.collection('withdrawals').add({ userId: telegramUserId, username: userState.telegramUsername, amount: amount, method: method, walletId: walletId, status: "pending", requestedAt: firebase.firestore.FieldValue.serverTimestamp() }); const userRef = db.collection('users').doc(telegramUserId); await userRef.update({ balance: firebase.firestore.FieldValue.increment(-amount) }); alert(`Success! Your withdrawal request for $${amount.toFixed(3)} has been submitted.`); userState.balance -= amount; document.getElementById('withdraw-amount').value = ''; document.getElementById('wallet-id').value = ''; updateUI(); }
 window.openTelegramLink = function(url) { window.open(url, '_blank'); }
 window.showTab = function(tabName, element) { document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active')); document.getElementById(tabName).classList.add('active'); document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active')); element.classList.add('active'); }
 window.openReferModal = function() { document.getElementById('refer-modal').style.display = 'flex'; }
@@ -218,15 +156,18 @@ window.closeReferModal = function() { document.getElementById('refer-modal').sty
 window.copyReferralLink = function(button) { const linkInput = document.getElementById('referral-link'); navigator.clipboard.writeText(linkInput.value).then(() => { const originalIcon = button.innerHTML; button.innerHTML = '<i class="fas fa-check"></i>'; setTimeout(() => { button.innerHTML = originalIcon; }, 1500); }).catch(err => console.error('Failed to copy text: ', err)); }
 window.onclick = function(event) { if (event.target == document.getElementById('refer-modal')) { closeReferModal(); } }
 
+// --- [FINAL APP ENTRY POINT] ---
+document.addEventListener('DOMContentLoaded', () => {
+    // This event fires after the entire HTML page is loaded and parsed.
+    console.log("DOM fully loaded. Checking for Telegram WebApp environment...");
 
-// --- [NEW: APP ENTRY POINT - THE OFFICIAL METHOD] ---
-if (window.Telegram && window.Telegram.WebApp) {
-    // This is the official way to wait for the Telegram app to be ready
-    Telegram.WebApp.ready();
-    // Pass the user object to the startApp function
-    startApp(window.Telegram.WebApp.initDataUnsafe.user);
-} else {
-    // If not in Telegram, start in testing mode immediately
-    console.warn("Telegram WebApp script not found. Running in browser testing mode.");
-    startApp(null);
-}
+    // Check if the Telegram script has loaded and the user object is available.
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+        Telegram.WebApp.ready(); // Let Telegram know the app is ready.
+        startApp(window.Telegram.WebApp.initDataUnsafe.user); // Start app in LIVE mode.
+    } else {
+        // If not in Telegram, or if the script hasn't loaded for some reason, start in testing mode.
+        console.error("CRITICAL: Telegram user data not found. Starting in TEST mode.");
+        startApp(null);
+    }
+});
