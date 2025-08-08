@@ -12,7 +12,7 @@
     <script src='//libtl.com/sdk.js' data-zone='9685198' data-sdk='show_9685198'></script>
     <link rel="stylesheet" href="style.css">
 </head>
-<body> <!-- The onload attribute has been removed -->
+<body> <!-- The onload attribute should be removed -->
 
     <div id="app-container">
         <!-- Home Tab -->
@@ -44,26 +44,26 @@
 
             <div class="bonus-section">
                 <h3 class="section-title">Bonus Points</h3>
-                <!-- Task Card with the crucial 'disabled' attribute on the verify button -->
-                <div class="task-card" id="task-channel_1">
+                <!-- MODIFIED: The task card now holds the data, and buttons have no onclick -->
+                <div class="task-card" id="task-channel_1" data-task-id="channel_1" data-url="https://t.me/durov" data-reward="0.05">
                     <div class="task-info">
                         <p class="task-title">Join Telegram Channel #1</p>
                         <p class="task-reward">+0.05 USDT</p>
                     </div>
                     <div class="task-buttons">
-                        <button class="join-btn" onclick="handleJoinClick('channel_1', 'https://t.me/durov')"><i class="fab fa-telegram-plane"></i> Join</button>
-                        <button class="verify-btn" onclick="handleVerifyClick('channel_1', 0.05)" disabled>Verify</button>
+                        <button class="join-btn"><i class="fab fa-telegram-plane"></i> Join</button>
+                        <button class="verify-btn" disabled>Verify</button>
                     </div>
                     <div class="task-done"><i class="fas fa-check"></i> Done</div>
                 </div>
-                <div class="task-card" id="task-channel_2">
+                <div class="task-card" id="task-channel_2" data-task-id="channel_2" data-url="https://t.me/telegram" data-reward="0.05">
                     <div class="task-info">
                         <p class="task-title">Join Telegram Channel #2</p>
                         <p class="task-reward">+0.05 USDT</p>
                     </div>
                     <div class="task-buttons">
-                        <button class="join-btn" onclick="handleJoinClick('channel_2', 'https://t.me/telegram')"><i class="fab fa-telegram-plane"></i> Join</button>
-                        <button class="verify-btn" onclick="handleVerifyClick('channel_2', 0.05)" disabled>Verify</button>
+                        <button class="join-btn"><i class="fab fa-telegram-plane"></i> Join</button>
+                        <button class="verify-btn" disabled>Verify</button>
                     </div>
                      <div class="task-done"><i class="fas fa-check"></i> Done</div>
                 </div>
