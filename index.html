@@ -4,37 +4,31 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Crypto Task App</title>
-    <!-- Google Fonts: Poppins -->
+    <!-- Stylesheets, Fonts, SDKs -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
-    
-    <!-- MONETAG SDK SCRIPT -->
     <script src='//libtl.com/sdk.js' data-zone='9685198' data-sdk='show_9685198'></script>
-
-    <!-- Main Stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
-<body nload="initializeApp()> <!-- Initialize the app on page load -->
+<body> <!-- The onload attribute has been removed -->
 
     <div id="app-container">
         <!-- Home Tab -->
         <div id="home" class="tab-content active">
+            <!-- Header and Balance Card sections are unchanged -->
             <div class="header">
                 <div class="user-info">
-                    <p class="welcome-text">Welcome back,</p>
+                    <p class="welcome-text">Welcome,</p>
                     <h2 class="username" id="home-username">User</h2>
                 </div>
                 <img src="https://i.pravatar.cc/100" alt="User Profile" class="profile-pic">
             </div>
-
             <div class="main-balance-card">
                 <p>Total Balance</p>
                 <h1 class="balance-amount">$<span id="balance-home">0.000</span> <span class="currency">USDT</span></h1>
             </div>
-
             <div class="stats-grid">
                 <div class="stat-box">
                     <i class="fas fa-eye icon"></i>
@@ -50,14 +44,15 @@
 
             <div class="bonus-section">
                 <h3 class="section-title">Bonus Points</h3>
+                <!-- Task Card with the crucial 'disabled' attribute on the verify button -->
                 <div class="task-card" id="task-channel_1">
                     <div class="task-info">
                         <p class="task-title">Join Telegram Channel #1</p>
                         <p class="task-reward">+0.05 USDT</p>
                     </div>
                     <div class="task-buttons">
-                        <button class="join-btn" onclick="openTelegramLink('https://t.me/durov')"><i class="fab fa-telegram-plane"></i> Join</button>
-                        <button class="verify-btn" onclick="verifyJoin('channel_1', 0.05)">Verify</button>
+                        <button class="join-btn" onclick="handleJoinClick('channel_1', 'https://t.me/durov')"><i class="fab fa-telegram-plane"></i> Join</button>
+                        <button class="verify-btn" onclick="handleVerifyClick('channel_1', 0.05)" disabled>Verify</button>
                     </div>
                     <div class="task-done"><i class="fas fa-check"></i> Done</div>
                 </div>
@@ -67,14 +62,15 @@
                         <p class="task-reward">+0.05 USDT</p>
                     </div>
                     <div class="task-buttons">
-                        <button class="join-btn" onclick="openTelegramLink('https://t.me/telegram')"><i class="fab fa-telegram-plane"></i> Join</button>
-                        <button class="verify-btn" onclick="verifyJoin('channel_2', 0.05)">Verify</button>
+                        <button class="join-btn" onclick="handleJoinClick('channel_2', 'https://t.me/telegram')"><i class="fab fa-telegram-plane"></i> Join</button>
+                        <button class="verify-btn" onclick="handleVerifyClick('channel_2', 0.05)" disabled>Verify</button>
                     </div>
                      <div class="task-done"><i class="fas fa-check"></i> Done</div>
                 </div>
             </div>
         </div>
 
+        <!-- Other Tabs (Earn, Withdraw, Profile) and Modals are unchanged -->
         <!-- Earn Tab -->
         <div id="earn" class="tab-content">
             <h2 class="page-title">Earn Rewards</h2>
@@ -92,7 +88,6 @@
                 </button>
             </div>
         </div>
-
         <!-- Withdraw Tab -->
         <div id="withdraw" class="tab-content">
             <h2 class="page-title">Withdraw Funds</h2>
@@ -122,7 +117,6 @@
                 </button>
             </div>
         </div>
-
         <!-- Profile Tab -->
         <div id="profile" class="tab-content">
             <div class="profile-header">
@@ -147,13 +141,8 @@
                 </div>
             </div>
         </div>
-
-        <!-- Floating Refer and Earn Button -->
-        <button class="refer-fab" onclick="openReferModal()">
-            <i class="fas fa-gift"></i>
-        </button>
-
-        <!-- Refer and Earn Modal -->
+        <!-- Modals and Nav Bar -->
+        <button class="refer-fab" onclick="openReferModal()"><i class="fas fa-gift"></i></button>
         <div id="refer-modal" class="modal-overlay">
             <div class="modal-content">
                 <button class="close-btn" onclick="closeReferModal()">&times;</button>
@@ -178,31 +167,16 @@
             </div>
         </div>
     </div>
-
-    <!-- Bottom Navigation Bar -->
     <nav class="nav-bar">
-        <a href="#" class="nav-item active" onclick="showTab('home', this)">
-            <i class="fas fa-home"></i><span>Home</span>
-        </a>
-        <a href="#" class="nav-item" onclick="showTab('earn', this)">
-            <i class="fas fa-coins"></i><span>Earn</span>
-        </a>
-        <a href="#" class="nav-item" onclick="showTab('withdraw', this)">
-            <i class="fas fa-wallet"></i><span>Withdraw</span>
-        </a>
-        <a href="#" class="nav-item" onclick="showTab('profile', this)">
-            <i class="fas fa-user"></i><span>Profile</span>
-        </a>
+        <a href="#" class="nav-item active" onclick="showTab('home', this)"><i class="fas fa-home"></i><span>Home</span></a>
+        <a href="#" class="nav-item" onclick="showTab('earn', this)"><i class="fas fa-coins"></i><span>Earn</span></a>
+        <a href="#" class="nav-item" onclick="showTab('withdraw', this)"><i class="fas fa-wallet"></i><span>Withdraw</span></a>
+        <a href="#" class="nav-item" onclick="showTab('profile', this)"><i class="fas fa-user"></i><span>Profile</span></a>
     </nav>
     
-    <!-- NEW: Firebase v9+ SDKs -->
-    <!-- The "defer" attribute is important -->
+    <!-- Scripts -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js" defer></script>
-    
-    <!-- Your App's Logic - type="module" is NOT needed with compat libraries -->
     <script src="script.js" defer></script>
-
 </body>
 </html>
-
