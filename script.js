@@ -27,57 +27,126 @@ const WITHDRAWAL_MINIMUMS = {
     ton: 7
 };
 
-// --- [CORE APP LOGIC] ---
+// --- [CORE APP LOGIC WITH TELEGRAM INTEGRATION] ---
 
-// Make the core functions available globally so HTML can call them
+// This function is called from the HTML's onload attribute
 window.initializeApp = async function() {
-    telegramUserId = getTelegramUserId();
-    
-    const userRef = db.collection('users').doc(telegramUserId);
-    const doc = await userRef.get();
-
-    if (!doc.exists) {
-        console.log('No such document! Creating new user...');
-        const newUserState = {
-            username: "New User",
-            telegramUsername: `@${telegramUserId}`,
-            balance: 0.0,
-            tasksCompletedToday: 0,
-            lastTaskTimestamp: null,
-            totalEarned: 0,
-            totalAdsViewed: 0,
-            totalRefers: 0,
-            joinedBonusTasks: []
-        };
-        await userRef.set(newUserState);
-        userState = newUserState;
-    } else {
-        console.log('Document data:', doc.data());
-        userState = doc.data();
+    // Check if the app is running inside the official Telegram app
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+        // --- LIVE MODE: RUNNING INSIDE TELEGRAM ---
+        const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
         
-        if (userState.lastTaskTimestamp) {
-            const now = new Date();
-            const lastTaskDate = userState.lastTaskTimestamp.toDate();
-            if (now.getUTCDate() > lastTaskDate.getUTCDate() || now.getUTCMonth() > lastTaskDate.getUTCMonth()) {
-                userState.tasksCompletedToday = 0;
-                await userRef.update({ tasksCompletedToday: 0 });
+        // Use the REAL Telegram User ID. This is the most important part.
+        telegramUserId = tgUser.id.toString();
+        
+        console.log(`LIVE MODE: Running in Telegram for user: ${tgUser.first_name} (ID: ${telegramUserId})`);
+        
+        const userRef = db.collection('users').doc(telegramUserId);
+        const doc = await userRef.get();
+
+        if (!doc.exists) {
+            // NEW USER: Create account with their REAL Telegram data and a unique avatar
+            console.log('New Telegram user detected. Creating account...');
+            const newUserState = {
+                username: `${tgUser.first_name} ${tgUser.last_name || ''}`.trim(),
+                telegramUsername: `@${tgUser.username || 'N/A'}`,
+                profilePicUrl: generatePlaceholderAvatar(telegramUserId), // Generate unique avatar
+                balance: 0.0,
+                tasksCompletedToday: 0,
+                lastTaskTimestamp: null,
+                totalEarned: 0,
+                totalAdsViewed: 0,
+                totalRefers: 0,
+                joinedBonusTasks: []
+            };
+            await userRef.set(newUserState);
+            userState = newUserState;
+        } else {
+            // RETURNING USER: Load their data and check for updates
+            console.log('Returning user. Loading data from Firebase...');
+            userState = doc.data();
+            
+            // This ensures older users get a profile pic URL if they don't have one
+            // and updates their name if they changed it in Telegram
+            let updates = {};
+            if (!userState.profilePicUrl) {
+                updates.profilePicUrl = generatePlaceholderAvatar(telegramUserId);
+            }
+            const currentName = `${tgUser.first_name} ${tgUser.last_name || ''}`.trim();
+            if (userState.username !== currentName) {
+                updates.username = currentName;
+            }
+            if(Object.keys(updates).length > 0) {
+                await userRef.update(updates);
+                userState = {...userState, ...updates};
+            }
+            
+            // Perform the 24-hour task reset check
+            if (userState.lastTaskTimestamp) {
+                const now = new Date();
+                const lastTaskDate = userState.lastTaskTimestamp.toDate();
+                if (now.getUTCDate() > lastTaskDate.getUTCDate() || now.getUTCMonth() > lastTaskDate.getUTCMonth()) {
+                    userState.tasksCompletedToday = 0;
+                    await userRef.update({ tasksCompletedToday: 0 });
+                }
+            }
+        }
+    } else {
+        // --- FALLBACK/TESTING MODE: Not running in Telegram ---
+        console.warn("TESTING MODE: Not running in Telegram. Using a fake user ID.");
+        telegramUserId = getFakeUserIdForTesting();
+        
+        const userRef = db.collection('users').doc(telegramUserId);
+        const doc = await userRef.get();
+        if (!doc.exists) {
+            const fakeUserState = {
+                username: "Test User",
+                telegramUsername: `@testuser`,
+                profilePicUrl: generatePlaceholderAvatar(telegramUserId),
+                balance: 0.0,
+                tasksCompletedToday: 0,
+                lastTaskTimestamp: null,
+                totalEarned: 0,
+                totalAdsViewed: 0,
+                totalRefers: 0,
+                joinedBonusTasks: []
+            };
+            await userRef.set(fakeUserState);
+            userState = fakeUserState;
+        } else {
+            userState = doc.data();
+             if (!userState.profilePicUrl) {
+                userState.profilePicUrl = generatePlaceholderAvatar(telegramUserId);
             }
         }
     }
     
+    // Finally, update the entire UI with the correct user data
     updateUI();
 }
 
-function getTelegramUserId() {
+/**
+ * Generates a unique, consistent avatar for each user based on their ID.
+ */
+function generatePlaceholderAvatar(userId) {
+    return `https://i.pravatar.cc/150?u=${userId}`;
+}
+
+function getFakeUserIdForTesting() {
     if (localStorage.getItem('fakeTelegramId')) {
         return localStorage.getItem('fakeTelegramId');
     }
-    const fakeId = 'user_' + Math.random().toString(36).substr(2, 9);
+    const fakeId = 'test_user_' + Math.random().toString(36).substr(2, 9);
     localStorage.setItem('fakeTelegramId', fakeId);
     return fakeId;
 }
 
 function updateUI() {
+    document.querySelectorAll('.profile-pic, .profile-pic-large').forEach(img => {
+        if (userState.profilePicUrl) {
+            img.src = userState.profilePicUrl;
+        }
+    });
     const balanceString = userState.balance.toFixed(3);
     const totalEarnedString = userState.totalEarned.toFixed(3);
     document.getElementById('balance-home').textContent = balanceString;
@@ -110,23 +179,17 @@ function updateUI() {
 
 
 // --- [USER ACTIONS] ---
-
 window.completeAdTask = async function() {
     if (userState.tasksCompletedToday >= DAILY_TASK_LIMIT) {
         alert("You have completed all ad tasks for today!");
         return;
     }
-
     const taskButton = document.getElementById('start-task-button');
-
     try {
         taskButton.disabled = true;
         taskButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading Ad...';
-
         await window.show_9685198();
-        
         console.log("Ad success. Rewarding user in database...");
-        
         const userRef = db.collection('users').doc(telegramUserId);
         await userRef.update({
             balance: firebase.firestore.FieldValue.increment(AD_REWARD),
@@ -135,14 +198,11 @@ window.completeAdTask = async function() {
             totalAdsViewed: firebase.firestore.FieldValue.increment(1),
             lastTaskTimestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
-
         userState.balance += AD_REWARD;
         userState.totalEarned += AD_REWARD;
         userState.tasksCompletedToday++;
         userState.totalAdsViewed++;
-
         alert("Success! $0.002 has been added to your balance.");
-
     } catch (error) {
         console.error("An error occurred during the ad task:", error);
         alert("Ad could not be shown or was closed early. Please try again.");
@@ -157,32 +217,24 @@ window.verifyJoin = async function(taskId, reward) {
         alert("You have already completed this task.");
         return;
     }
-
     const verifyButton = document.querySelector(`#task-${taskId} .verify-btn`);
     verifyButton.disabled = true;
     verifyButton.textContent = "Verifying...";
-
     const hasJoined = confirm("Please confirm that you have joined the Telegram channel. We will verify this. False claims may lead to a ban.");
-
     if (hasJoined) {
         try {
             console.log(`User confirmed join for ${taskId}. Rewarding...`);
             const userRef = db.collection('users').doc(telegramUserId);
-            
             await userRef.update({
                 balance: firebase.firestore.FieldValue.increment(reward),
                 totalEarned: firebase.firestore.FieldValue.increment(reward),
                 joinedBonusTasks: firebase.firestore.FieldValue.arrayUnion(taskId)
             });
-
             userState.balance += reward;
             userState.totalEarned += reward;
             userState.joinedBonusTasks.push(taskId);
-            
             alert(`Verification successful! You've earned a bonus of $${reward}.`);
-            
             updateUI();
-
         } catch (error) {
             console.error("Error rewarding user for channel join:", error);
             alert("An error occurred. Please try again.");
@@ -201,7 +253,6 @@ window.submitWithdrawal = async function() {
     const method = document.getElementById('withdraw-method').value;
     const walletId = document.getElementById('wallet-id').value.trim();
     const minAmount = WITHDRAWAL_MINIMUMS[method];
-
     if (isNaN(amount) || amount <= 0 || !walletId) {
         alert('Please enter a valid amount and wallet ID.');
         return;
@@ -214,7 +265,6 @@ window.submitWithdrawal = async function() {
         alert('Withdrawal failed. You do not have enough balance.');
         return;
     }
-    
     await db.collection('withdrawals').add({
         userId: telegramUserId,
         username: userState.telegramUsername,
@@ -224,14 +274,11 @@ window.submitWithdrawal = async function() {
         status: "pending",
         requestedAt: firebase.firestore.FieldValue.serverTimestamp()
     });
-    
     const userRef = db.collection('users').doc(telegramUserId);
     await userRef.update({
         balance: firebase.firestore.FieldValue.increment(-amount)
     });
-    
     alert(`Success! Your withdrawal request for $${amount.toFixed(3)} has been submitted.`);
-    
     userState.balance -= amount;
     document.getElementById('withdraw-amount').value = '';
     document.getElementById('wallet-id').value = '';
